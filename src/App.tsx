@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { generateSpeech } from './services/tts';
 import { saveGeneration, getGenerations, type Generation } from './services/db';
 import AudioVisualizer from './components/AudioVisualizer';
