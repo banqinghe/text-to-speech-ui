@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { generateSpeech } from './services/tts';
+import { saveGeneration, getGenerations, type Generation } from './services/db';
 import AudioVisualizer from './components/AudioVisualizer';
 
 // Icons
@@ -15,6 +16,9 @@ const DownloadIcon = () => (
 const LoaderIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="animate-spin"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg>
 );
+const HistoryIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 6v6l4 2"/></svg>
+);
 
 export default function App() {
   const [text, setText] = useState('');
@@ -25,8 +29,21 @@ export default function App() {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [error, setError] = useState<string | null>(null);
-
+  const [history, setHistory] = useState<Generation[]>([]);
   const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    loadHistory();
+  }, []);
+
+  const loadHistory = async () => {
+    try {
+      const gens = await getGenerations();
+      setHistory(gens);
+    } catch (e) {
+      console.error("Failed to load history", e);
+    }
+  };
 
   const handleGenerate = async () => {
     if (!text.trim()) return;
@@ -42,6 +59,9 @@ export default function App() {
 
     try {
       const blob = await generateSpeech({ text, apiKey });
+      await saveGeneration(text, blob);
+      await loadHistory(); // Refresh history
+      
       const url = URL.createObjectURL(blob);
       setAudioUrl(url);
     } catch (err: any) {
@@ -49,6 +69,21 @@ export default function App() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleHistorySelect = (item: Generation) => {
+    setAudioUrl(null);
+    setAudioElement(null);
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+    
+    // Small timeout to allow cleanup
+    setTimeout(() => {
+      const url = URL.createObjectURL(item.blob);
+      setAudioUrl(url);
+      setText(item.text);
+    }, 0);
   };
 
   const togglePlay = () => {
@@ -228,6 +263,32 @@ export default function App() {
                   <DownloadIcon />
                   <span>Download</span>
                 </button>
+              </div>
+            </div>
+          )}
+
+          {/* History List */}
+          {history.length > 0 && !isLoading && (
+            <div className="pt-8 border-t border-gray-200">
+              <div className="flex items-center gap-2 mb-4 text-gray-500">
+                <HistoryIcon />
+                <h3 className="text-sm font-medium uppercase tracking-wider">Recent History</h3>
+              </div>
+              <div className="space-y-3">
+                {history.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => handleHistorySelect(item)}
+                    className="w-full text-left p-4 rounded-xl bg-white border border-gray-200 hover:border-gray-400 hover:shadow-sm transition-all group"
+                  >
+                    <p className="text-sm text-gray-900 font-medium line-clamp-1 mb-1 group-hover:text-emerald-600 transition-colors">
+                      {item.text}
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      {new Date(item.timestamp).toLocaleString()}
+                    </p>
+                  </button>
+                ))}
               </div>
             </div>
           )}
